@@ -13,7 +13,9 @@
             overflow: hidden; display: flex; flex-direction: column; font-family: 'Arial Black', sans-serif;
         }
         .bus-top { background: white; color: #ff6600; height: 20px; line-height: 20px; font-weight: bold; font-size: 13px; text-align: center; }
+        /* Dizel: bež podloga, narančasta slova */
         .bus-bottom-diesel { background: #f5f5dc; color: #ff6600; height: 20px; line-height: 20px; font-weight: bold; font-size: 11px; text-align: center; }
+        /* Plin: svijetlo plava podloga, narančasta slova */
         .bus-bottom-cng { background: #87ceeb; color: #ff6600; height: 20px; line-height: 20px; font-weight: bold; font-size: 11px; text-align: center; }
     </style>
 </head>
@@ -25,8 +27,7 @@
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
     
     var markers = {};
-    var stopMarkers = L.layerGroup().addTo(map);
-    var routeLine = L.polyline([], {color: '#ff6600', weight: 5}).addTo(map);
+    var stopLayer = L.layerGroup().addTo(map);
 
     function loadStops() {
         fetch('/api/stops/rijeka')
@@ -34,8 +35,8 @@
             .then(stops => {
                 stops.forEach(stop => {
                     L.circleMarker([stop.latitude, stop.longitude], {
-                        radius: 5, color: '#0078ff', fillColor: 'white', fillOpacity: 1
-                    }).addTo(stopMarkers).bindPopup("<b>Stanica: " + stop.name + "</b>");
+                        radius: 4, color: '#333', fillColor: '#fff', fillOpacity: 1, weight: 1
+                    }).addTo(stopLayer).bindPopup("<b>Stanica: " + stop.name + "</b><br>ID: " + stop.stopId);
                 });
             });
     }
@@ -56,12 +57,13 @@
                         markers[bus.garageNumber] = L.marker([bus.latitude, bus.longitude], {icon: icon}).addTo(map);
                     }
                     
-                    markers[bus.garageNumber].bindPopup(`<b>Linija: ${bus.name}</b><br>Odredište: ${bus.destination}<br>Reg: ${bus.registration}<br>Gbr: ${bus.garageNumber}<br>Brzina: ${bus.speed} km/h`);
-                    
-                    markers[bus.garageNumber].on('click', () => {
-                        // Ovdje bi išao poziv za rutu ako API podržava koordinate linije
-                        routeLine.setLatLngs([[bus.latitude, bus.longitude]]); 
-                    });
+                    markers[bus.garageNumber].bindPopup(`
+                        <b>Linija: ${bus.name}</b><br>
+                        <b>Smjer: ${bus.destination}</b><hr>
+                        Garažni broj: ${bus.garageNumber}<br>
+                        Registracija: ${bus.registration}<br>
+                        Brzina: ${bus.speed} km/h
+                    `);
                 });
                 for (var gbr in markers) { if (!currentGbrs.includes(gbr)) { map.removeLayer(markers[gbr]); delete markers[gbr]; } }
             });
