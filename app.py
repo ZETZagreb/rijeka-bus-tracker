@@ -29,24 +29,30 @@ def get_rijeka_buses():
         for bus in vehicles:
             gbr = str(bus.get("vehicleNumber", ""))
             line = str(bus.get("lineName", ""))
-            lat = bus.get("latitude")
-            lon = bus.get("longitude")
-            reg = bus.get("licensePlate", "N/A")
-            dest = bus.get("destinationName", "N/A")
-            if not gbr or not lat: continue
+            if not gbr or not bus.get("latitude"): continue
             output.append({
                 "garageNumber": gbr,
                 "name": line,
-                "latitude": lat,
-                "longitude": lon,
-                "registration": reg,
-                "destination": dest,
+                "latitude": bus.get("latitude"),
+                "longitude": bus.get("longitude"),
+                "registration": bus.get("licensePlate", "N/A"),
+                "destination": bus.get("destinationName", "N/A"),
                 "type": get_bus_type(gbr),
                 "speed": bus.get("speed", 0)
             })
         return jsonify({"vehicles": output})
     except:
         return jsonify({"vehicles": []})
+
+@app.route('/api/stops/rijeka')
+def get_rijeka_stops():
+    # Dohvaćanje stanica s Autotrolej API-ja
+    url = "https://cloud.it-sistemi.com/AutotrolejS3/api/v1/stops"
+    try:
+        r = requests.get(url, timeout=10)
+        return jsonify(r.json().get("data", []))
+    except:
+        return jsonify([])
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=int(os.environ.get("PORT", 5000)))
