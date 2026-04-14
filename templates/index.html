@@ -13,8 +13,8 @@
             overflow: hidden; display: flex; flex-direction: column; font-family: 'Arial Black', sans-serif;
         }
         .bus-top { background: white; color: #ff6600; height: 20px; line-height: 20px; font-weight: bold; font-size: 13px; text-align: center; }
-        .bus-bottom-diesel { background: #f5f5dc; color: #333; height: 20px; line-height: 20px; font-weight: bold; font-size: 11px; text-align: center; }
-        .bus-bottom-cng { background: #87ceeb; color: white; height: 20px; line-height: 20px; font-weight: bold; font-size: 11px; text-align: center; text-shadow: 1px 1px 1px rgba(0,0,0,0.5); }
+        .bus-bottom-diesel { background: #f5f5dc; color: #ff6600; height: 20px; line-height: 20px; font-weight: bold; font-size: 11px; text-align: center; }
+        .bus-bottom-cng { background: #87ceeb; color: #ff6600; height: 20px; line-height: 20px; font-weight: bold; font-size: 11px; text-align: center; }
     </style>
 </head>
 <body>
@@ -23,7 +23,23 @@
 <script>
     var map = L.map('map').setView([45.3271, 14.4422], 13);
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
+    
     var markers = {};
+    var stopMarkers = L.layerGroup().addTo(map);
+    var routeLine = L.polyline([], {color: '#ff6600', weight: 5}).addTo(map);
+
+    function loadStops() {
+        fetch('/api/stops/rijeka')
+            .then(res => res.json())
+            .then(stops => {
+                stops.forEach(stop => {
+                    L.circleMarker([stop.latitude, stop.longitude], {
+                        radius: 5, color: '#0078ff', fillColor: 'white', fillOpacity: 1
+                    }).addTo(stopMarkers).bindPopup("<b>Stanica: " + stop.name + "</b>");
+                });
+            });
+    }
+
     function updateBuses() {
         fetch('/api/buses/rijeka')
             .then(res => res.json())
@@ -31,18 +47,27 @@
                 var currentGbrs = data.vehicles.map(v => v.garageNumber);
                 data.vehicles.forEach(bus => {
                     var colorClass = bus.type === 'cng' ? 'bus-bottom-cng' : 'bus-bottom-diesel';
-                    var labelContent = '<div class="bus-label"><div class="bus-top">'+bus.name+'</div><div class="'+colorClass+'">'+bus.garageNumber+'</div></div>';
+                    var labelContent = `<div class="bus-label"><div class="bus-top">${bus.name}</div><div class="${colorClass}">${bus.garageNumber}</div></div>`;
                     var icon = L.divIcon({ html: labelContent, className: '', iconSize: [45, 40], iconAnchor: [22, 20] });
+                    
                     if (markers[bus.garageNumber]) {
                         markers[bus.garageNumber].setLatLng([bus.latitude, bus.longitude]);
                     } else {
                         markers[bus.garageNumber] = L.marker([bus.latitude, bus.longitude], {icon: icon}).addTo(map);
                     }
-                    markers[bus.garageNumber].bindPopup('<b>Linija: '+bus.name+'</b><br><b>Smjer: '+bus.destination+'</b><hr>Reg: '+bus.registration+'<br>Gbr: '+bus.garageNumber+'<br>Tip: '+bus.type.toUpperCase()+'<br>Brzina: '+bus.speed+' km/h');
+                    
+                    markers[bus.garageNumber].bindPopup(`<b>Linija: ${bus.name}</b><br>Odredište: ${bus.destination}<br>Reg: ${bus.registration}<br>Gbr: ${bus.garageNumber}<br>Brzina: ${bus.speed} km/h`);
+                    
+                    markers[bus.garageNumber].on('click', () => {
+                        // Ovdje bi išao poziv za rutu ako API podržava koordinate linije
+                        routeLine.setLatLngs([[bus.latitude, bus.longitude]]); 
+                    });
                 });
                 for (var gbr in markers) { if (!currentGbrs.includes(gbr)) { map.removeLayer(markers[gbr]); delete markers[gbr]; } }
             });
     }
+
+    loadStops();
     setInterval(updateBuses, 5000);
     updateBuses();
 </script>
