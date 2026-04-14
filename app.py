@@ -1,10 +1,10 @@
 import os
 import requests
 from flask import Flask, render_template, jsonify
-from datetime import datetime, timedelta
 
 app = Flask(__name__)
 
+# Funkcija za određivanje tipa goriva prema garažnom broju
 def get_bus_type(gbr):
     try:
         num = int(gbr)
@@ -20,23 +20,23 @@ def index():
 
 @app.route('/api/buses/rijeka')
 def get_rijeka_buses():
-    url = "https://cloud.it-sistemi.com/AutotrolejS3/api/v1/vehicle-positions"
+    # Službeni API za pozicije vozila
+    url = "https://api.autotrolej.hr/api/open/v1/vehicles"
     try:
         r = requests.get(url, timeout=10)
         data = r.json()
-        vehicles = data.get("data", [])
         output = []
-        for bus in vehicles:
-            gbr = str(bus.get("vehicleNumber", ""))
-            line = str(bus.get("lineName", ""))
-            if not gbr or not bus.get("latitude"): continue
+        for bus in data:
+            gbr = str(bus.get("vehicleId", ""))
+            if not gbr or bus.get("latitude") == 0: continue
+            
             output.append({
                 "garageNumber": gbr,
-                "name": line,
+                "name": str(bus.get("lineCode", "")),
                 "latitude": bus.get("latitude"),
                 "longitude": bus.get("longitude"),
                 "registration": bus.get("licensePlate", "N/A"),
-                "destination": bus.get("destinationName", "N/A"),
+                "destination": bus.get("destination", "N/A"),
                 "type": get_bus_type(gbr),
                 "speed": bus.get("speed", 0)
             })
@@ -46,11 +46,11 @@ def get_rijeka_buses():
 
 @app.route('/api/stops/rijeka')
 def get_rijeka_stops():
-    # Dohvaćanje stanica s Autotrolej API-ja
-    url = "https://cloud.it-sistemi.com/AutotrolejS3/api/v1/stops"
+    # Službeni API za stanice
+    url = "https://api.autotrolej.hr/api/open/v1/stops"
     try:
         r = requests.get(url, timeout=10)
-        return jsonify(r.json().get("data", []))
+        return jsonify(r.json())
     except:
         return jsonify([])
 
