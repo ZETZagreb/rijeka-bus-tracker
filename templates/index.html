@@ -36,7 +36,7 @@
                 stops.forEach(stop => {
                     L.circleMarker([stop.latitude, stop.longitude], {
                         radius: 4, color: '#333', fillColor: '#fff', fillOpacity: 1, weight: 1
-                    }).addTo(stopLayer).bindPopup("<b>Stanica: " + stop.name + "</b><br>ID: " + stop.stopId);
+                    }).addTo(stopLayer).bindPopup("<b>Stanica: " + stop.name + "</b>");
                 });
             });
     }
@@ -59,7 +59,7 @@
                     
                     markers[bus.garageNumber].bindPopup(`
                         <b>Linija: ${bus.name}</b><br>
-                        <b>Smjer: ${bus.destination}</b><hr>
+                        <b>Odredište: ${bus.destination}</b><hr>
                         Garažni broj: ${bus.garageNumber}<br>
                         Registracija: ${bus.registration}<br>
                         Brzina: ${bus.speed} km/h
