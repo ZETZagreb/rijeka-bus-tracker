@@ -4,10 +4,10 @@ from flask import Flask, render_template, jsonify
 
 app = Flask(__name__)
 
-# Funkcija za određivanje tipa goriva prema garažnom broju
 def get_bus_type(gbr):
     try:
         num = int(gbr)
+        # Plinski autobusi (CNG) u Rijeci
         if 716 <= num <= 725 or 731 <= num <= 750 or 811 <= num <= 830:
             return "cng"
     except:
@@ -20,23 +20,27 @@ def index():
 
 @app.route('/api/buses/rijeka')
 def get_rijeka_buses():
-    # Službeni API za pozicije vozila
-    url = "https://api.autotrolej.hr/api/open/v1/vehicles"
+    # Izvor koji koristi busri.alwaysdata.net
+    url = "https://cloud.it-sistemi.com/AutotrolejS3/api/v1/vehicle-positions"
     try:
         r = requests.get(url, timeout=10)
         data = r.json()
+        vehicles = data.get("data", [])
         output = []
-        for bus in data:
-            gbr = str(bus.get("vehicleId", ""))
-            if not gbr or bus.get("latitude") == 0: continue
+        for bus in vehicles:
+            gbr = str(bus.get("vehicleNumber", ""))
+            lat = bus.get("latitude")
+            lon = bus.get("longitude")
+            
+            if not gbr or not lat: continue
             
             output.append({
                 "garageNumber": gbr,
-                "name": str(bus.get("lineCode", "")),
-                "latitude": bus.get("latitude"),
-                "longitude": bus.get("longitude"),
+                "name": str(bus.get("lineName", "N/A")),
+                "latitude": lat,
+                "longitude": lon,
                 "registration": bus.get("licensePlate", "N/A"),
-                "destination": bus.get("destination", "N/A"),
+                "destination": bus.get("destinationName", "N/A"),
                 "type": get_bus_type(gbr),
                 "speed": bus.get("speed", 0)
             })
@@ -46,11 +50,11 @@ def get_rijeka_buses():
 
 @app.route('/api/stops/rijeka')
 def get_rijeka_stops():
-    # Službeni API za stanice
-    url = "https://api.autotrolej.hr/api/open/v1/stops"
+    # Izvor za stanice
+    url = "https://cloud.it-sistemi.com/AutotrolejS3/api/v1/stops"
     try:
         r = requests.get(url, timeout=10)
-        return jsonify(r.json())
+        return jsonify(r.json().get("data", []))
     except:
         return jsonify([])
 
