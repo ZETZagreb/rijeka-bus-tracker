@@ -27,39 +27,29 @@
         fetch('/api/buses/rijeka')
             .then(res => res.json())
             .then(data => {
-                let list = data.vehicles;
-                if (!list || !Array.isArray(list)) return;
+                if(!data.vehicles) return;
+                var currentGbrs = data.vehicles.map(v => v.gbr);
 
-                let activeIds = [];
-
-                list.forEach(item => {
-                    let v = item.vehicle || item;
-                    let id = v.vehicle ? v.vehicle.id : (v.gbr || v.id);
-                    let pos = v.position || v;
-                    let lat = pos.latitude || pos.lat;
-                    let lon = pos.longitude || pos.lon;
-                    let line = v.trip ? v.trip.route_id : (v.linija || v.line || "??");
-
-                    if (lat && lon && id) {
-                        activeIds.push(id.toString());
-                        let html = `<div class="bus-label">
-                            <div style="color:#ff6600; height:20px; line-height:20px; font-weight:bold; text-align:center; font-size:13px;">${line}</div>
-                            <div style="background:#ff6600; color:white; height:20px; line-height:20px; font-weight:bold; text-align:center; font-size:11px;">${id}</div>
+                data.vehicles.forEach(bus => {
+                    if (bus.lat && bus.lon && bus.gbr) {
+                        var html = `<div class="bus-label">
+                            <div style="color:#ff6600; height:20px; line-height:20px; font-weight:bold; text-align:center; font-size:13px;">${bus.linija}</div>
+                            <div style="background:#ff6600; color:white; height:20px; line-height:20px; font-weight:bold; text-align:center; font-size:11px;">${bus.gbr}</div>
                         </div>`;
-                        let icon = L.divIcon({ html: html, className: '', iconSize: [45, 40], iconAnchor: [22, 20] });
+                        var icon = L.divIcon({ html: html, className: '', iconSize: [45, 40], iconAnchor: [22, 20] });
                         
-                        if (markers[id]) {
-                            markers[id].setLatLng([lat, lon]);
+                        if (markers[bus.gbr]) {
+                            markers[bus.gbr].setLatLng([bus.lat, bus.lon]);
                         } else {
-                            markers[id] = L.marker([lat, lon], {icon: icon}).addTo(map);
+                            markers[bus.gbr] = L.marker([bus.lat, bus.lon], {icon: icon}).addTo(map);
                         }
                     }
                 });
 
-                Object.keys(markers).forEach(k => {
-                    if (!activeIds.includes(k)) {
-                        map.removeLayer(markers[k]);
-                        delete markers[k];
+                Object.keys(markers).forEach(key => {
+                    if (!currentGbrs.includes(key)) {
+                        map.removeLayer(markers[key]);
+                        delete markers[key];
                     }
                 });
             });
