@@ -27,19 +27,27 @@
         fetch('/api/buses/rijeka')
             .then(res => res.json())
             .then(data => {
-                if(!data.vehicles) return;
-                var currentIds = data.vehicles.map(v => v.gbr || v.id);
-                data.vehicles.forEach(bus => {
-                    var id = bus.gbr || bus.id;
-                    var linija = bus.linija || bus.line || "??";
-                    var lat = bus.lat || bus.latitude;
-                    var lon = bus.lon || bus.longitude;
+                let list = data.vehicles;
+                if (!list || !Array.isArray(list)) return;
+
+                let activeIds = [];
+
+                list.forEach(item => {
+                    let v = item.vehicle || item;
+                    let id = v.vehicle ? v.vehicle.id : (v.gbr || v.id);
+                    let pos = v.position || v;
+                    let lat = pos.latitude || pos.lat;
+                    let lon = pos.longitude || pos.lon;
+                    let line = v.trip ? v.trip.route_id : (v.linija || v.line || "??");
+
                     if (lat && lon && id) {
-                        var html = `<div class="bus-label">
-                            <div style="color:#ff6600; height:20px; line-height:20px; font-weight:bold; text-align:center; font-size:13px;">${linija}</div>
+                        activeIds.push(id.toString());
+                        let html = `<div class="bus-label">
+                            <div style="color:#ff6600; height:20px; line-height:20px; font-weight:bold; text-align:center; font-size:13px;">${line}</div>
                             <div style="background:#ff6600; color:white; height:20px; line-height:20px; font-weight:bold; text-align:center; font-size:11px;">${id}</div>
                         </div>`;
-                        var icon = L.divIcon({ html: html, className: '', iconSize: [45, 40], iconAnchor: [22, 20] });
+                        let icon = L.divIcon({ html: html, className: '', iconSize: [45, 40], iconAnchor: [22, 20] });
+                        
                         if (markers[id]) {
                             markers[id].setLatLng([lat, lon]);
                         } else {
@@ -47,12 +55,13 @@
                         }
                     }
                 });
-                for (var key in markers) {
-                    if (!currentIds.includes(key)) {
-                        map.removeLayer(markers[key]);
-                        delete markers[key];
+
+                Object.keys(markers).forEach(k => {
+                    if (!activeIds.includes(k)) {
+                        map.removeLayer(markers[k]);
+                        delete markers[k];
                     }
-                }
+                });
             });
     }
     setInterval(update, 5000);
