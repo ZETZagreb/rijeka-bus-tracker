@@ -23,47 +23,40 @@
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
     var markers = {};
 
-    function updateBuses() {
+    function update() {
         fetch('/api/buses/rijeka')
             .then(res => res.json())
             .then(data => {
                 if(!data.vehicles) return;
-                var currentGbrs = data.vehicles.map(v => v.garageNumber);
-                
+                var currentIds = data.vehicles.map(v => v.gbr || v.id);
                 data.vehicles.forEach(bus => {
-                    var html = `
-                        <div class="bus-label">
-                            <div style="color:#ff6600; height:20px; line-height:20px; font-weight:bold; text-align:center; font-size:13px;">${bus.name}</div>
-                            <div style="background:#ff6600; color:white; height:20px; line-height:20px; font-weight:bold; text-align:center; font-size:11px;">${bus.garageNumber}</div>
+                    var id = bus.gbr || bus.id;
+                    var linija = bus.linija || bus.line || "??";
+                    var lat = bus.lat || bus.latitude;
+                    var lon = bus.lon || bus.longitude;
+                    if (lat && lon && id) {
+                        var html = `<div class="bus-label">
+                            <div style="color:#ff6600; height:20px; line-height:20px; font-weight:bold; text-align:center; font-size:13px;">${linija}</div>
+                            <div style="background:#ff6600; color:white; height:20px; line-height:20px; font-weight:bold; text-align:center; font-size:11px;">${id}</div>
                         </div>`;
-                    
-                    var icon = L.divIcon({ html: html, className: '', iconSize: [45, 40], iconAnchor: [22, 20] });
-                    
-                    if (markers[bus.garageNumber]) {
-                        markers[bus.garageNumber].setLatLng([bus.latitude, bus.longitude]);
-                    } else {
-                        markers[bus.garageNumber] = L.marker([bus.latitude, bus.longitude], {icon: icon}).addTo(map);
+                        var icon = L.divIcon({ html: html, className: '', iconSize: [45, 40], iconAnchor: [22, 20] });
+                        if (markers[id]) {
+                            markers[id].setLatLng([lat, lon]);
+                        } else {
+                            markers[id] = L.marker([lat, lon], {icon: icon}).addTo(map);
+                        }
                     }
-                    
-                    markers[bus.garageNumber].bindPopup(`
-                        <b>Linija ${bus.name}</b><br>
-                        <b>Odredište: ${bus.destination}</b><hr>
-                        Garažni broj: ${bus.garageNumber}
-                    `);
                 });
-
-                // Ukloni autobuse koji više nisu aktivni
-                for (var gbr in markers) {
-                    if (!currentGbrs.includes(gbr)) {
-                        map.removeLayer(markers[gbr]);
-                        delete markers[gbr];
+                for (var key in markers) {
+                    if (!currentIds.includes(key)) {
+                        map.removeLayer(markers[key]);
+                        delete markers[key];
                     }
                 }
             });
     }
-
-    setInterval(updateBuses, 5000);
-    updateBuses();
+    setInterval(update, 5000);
+    update();
 </script>
 </body>
 </html>
