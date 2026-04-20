@@ -23,39 +23,49 @@
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
     var markers = {};
 
-    function update() {
-        fetch('/api/buses/rijeka')
-            .then(res => res.json())
-            .then(data => {
-                if(!data.vehicles) return;
-                var currentGbrs = data.vehicles.map(v => v.gbr);
+    function connect() {
+        // Direktan spoj na Autotrolej WebSocket koji si uslikao u Network tabu
+        var socket = new WebSocket('wss://api.autotrolej.hr/api/open/v1/voznired/lokacije');
 
-                data.vehicles.forEach(bus => {
-                    if (bus.lat && bus.lon && bus.gbr) {
-                        var html = `<div class="bus-label">
-                            <div style="color:#ff6600; height:20px; line-height:20px; font-weight:bold; text-align:center; font-size:13px;">${bus.linija}</div>
-                            <div style="background:#ff6600; color:white; height:20px; line-height:20px; font-weight:bold; text-align:center; font-size:11px;">${bus.gbr}</div>
-                        </div>`;
-                        var icon = L.divIcon({ html: html, className: '', iconSize: [45, 40], iconAnchor: [22, 20] });
-                        
-                        if (markers[bus.gbr]) {
-                            markers[bus.gbr].setLatLng([bus.lat, bus.lon]);
-                        } else {
-                            markers[bus.gbr] = L.marker([bus.lat, bus.lon], {icon: icon}).addTo(map);
-                        }
-                    }
-                });
+        socket.onmessage = function(event) {
+            var data = JSON.parse(event.data);
+            // WebSocket nekad šalje jedan bus, nekad listu - ovo pokriva oboje
+            var buses = Array.isArray(data) ? data : [data];
 
-                Object.keys(markers).forEach(key => {
-                    if (!currentGbrs.includes(key)) {
-                        map.removeLayer(markers[key]);
-                        delete markers[key];
+            buses.forEach(bus => {
+                var id = bus.garazniBroj;
+                var linija = bus.linija;
+                var lat = bus.latituda;
+                var lon = bus.longituda;
+
+                if (lat && lon && id) {
+                    var html = `<div class="bus-label">
+                        <div style="color:#ff6600; height:20px; line-height:20px; font-weight:bold; text-align:center; font-size:13px;">${linija}</div>
+                        <div style="background:#ff6600; color:white; height:20px; line-height:20px; font-weight:bold; text-align:center; font-size:11px;">${id}</div>
+                    </div>`;
+                    var icon = L.divIcon({ html: html, className: '', iconSize: [45, 40], iconAnchor: [22, 20] });
+                    
+                    if (markers[id]) {
+                        markers[id].setLatLng([lat, lon]);
+                    } else {
+                        markers[id] = L.marker([lat, lon], {icon: icon}).addTo(map);
                     }
-                });
+                    
+                    markers[id].bindPopup("Linija: " + linija + "<br>GBR: " + id);
+                }
             });
+        };
+
+        socket.onclose = function() {
+            setTimeout(connect, 2000);
+        };
+        
+        socket.onerror = function(err) {
+            console.error("Socket error: ", err);
+        };
     }
-    setInterval(update, 5000);
-    update();
+
+    connect();
 </script>
 </body>
 </html>
