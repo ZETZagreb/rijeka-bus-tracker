@@ -13,7 +13,10 @@ def get_rijeka_buses():
     url = "https://winter-star-9de5.kombajn.workers.dev/?autotrolej"
     try:
         r = requests.get(url, timeout=10)
-        return jsonify({"vehicles": r.json()})
+        data = r.json()
+        # Izvlačenje iz GTFS strukture koju šalje službeni izvor
+        vehicles = data.get('entity', data)
+        return jsonify({"vehicles": vehicles})
     except:
         return jsonify({"vehicles": []})
 
