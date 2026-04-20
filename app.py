@@ -1,18 +1,9 @@
 import os
 import requests
 from flask import Flask, render_template, jsonify
+from google.transit import gtfs_realtime_pb2
 
 app = Flask(__name__)
-
-def get_bus_type(gbr):
-    try:
-        num = int(gbr)
-        # Plinski autobusi (CNG) u Rijeci
-        if 716 <= num <= 725 or 731 <= num <= 750 or 811 <= num <= 830:
-            return "cng"
-    except:
-        pass
-    return "diesel"
 
 @app.route('/')
 def index():
@@ -20,43 +11,28 @@ def index():
 
 @app.route('/api/buses/rijeka')
 def get_rijeka_buses():
-    # Izvor koji koristi busri.alwaysdata.net
-    url = "https://cloud.it-sistemi.com/AutotrolejS3/api/v1/vehicle-positions"
+    # Službeni link s portala grada Rijeke
+    url = "https://servisi.rijeka.hr/gtfs/vehicle_positions.pb"
     try:
-        r = requests.get(url, timeout=10)
-        data = r.json()
-        vehicles = data.get("data", [])
+        response = requests.get(url, timeout=10)
+        feed = gtfs_realtime_pb2.FeedMessage()
+        feed.ParseFromString(response.content)
+        
         output = []
-        for bus in vehicles:
-            gbr = str(bus.get("vehicleNumber", ""))
-            lat = bus.get("latitude")
-            lon = bus.get("longitude")
-            
-            if not gbr or not lat: continue
-            
-            output.append({
-                "garageNumber": gbr,
-                "name": str(bus.get("lineName", "N/A")),
-                "latitude": lat,
-                "longitude": lon,
-                "registration": bus.get("licensePlate", "N/A"),
-                "destination": bus.get("destinationName", "N/A"),
-                "type": get_bus_type(gbr),
-                "speed": bus.get("speed", 0)
-            })
+        for entity in feed.entity:
+            if entity.HasField('vehicle'):
+                # Izvlačimo podatke: gbr, liniju, lat, lon
+                output.append({
+                    "garageNumber": entity.vehicle.vehicle.id,
+                    "name": entity.vehicle.trip.route_id, # Broj linije
+                    "latitude": entity.vehicle.position.latitude,
+                    "longitude": entity.vehicle.position.longitude,
+                    "speed": round(entity.vehicle.position.speed or 0, 1)
+                })
         return jsonify({"vehicles": output})
-    except:
-        return jsonify({"vehicles": []})
-
-@app.route('/api/stops/rijeka')
-def get_rijeka_stops():
-    # Izvor za stanice
-    url = "https://cloud.it-sistemi.com/AutotrolejS3/api/v1/stops"
-    try:
-        r = requests.get(url, timeout=10)
-        return jsonify(r.json().get("data", []))
-    except:
-        return jsonify([])
+    except Exception as e:
+        print(f"Greška: {e}")
+        return jsonify({"vehicles": [], "error": str(e)})
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=int(os.environ.get("PORT", 5000)))
