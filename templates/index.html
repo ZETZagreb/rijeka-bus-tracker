@@ -1,66 +1,325 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>Autotrolej Rijeka Live</title>
+    <title>Autotrolej Rijeka - Live</title>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <style>
         body { margin: 0; padding: 0; }
         #map { height: 100vh; width: 100%; }
-        .bus-label {
-            width: 45px; height: 40px; border: 2px solid #333; border-radius: 6px;
-            overflow: hidden; display: flex; flex-direction: column; font-family: Arial, sans-serif;
+        .search-container {
+            position: absolute; 
+            top: 10px; 
+            left: 50px; 
+            z-index: 1000; 
+            background: white; 
+            padding: 10px; 
+            border-radius: 5px; 
+            box-shadow: 0 2px 5px rgba(0,0,0,0.2);
+            display: flex;
+            gap: 10px;
+        }
+        .autocomplete-container {
+            position: relative;
+        }
+        .autocomplete-list {
+            position: absolute;
+            top: 100%;
+            left: 0;
+            right: 0;
             background: white;
+            border: 1px solid #ccc;
+            border-top: none;
+            border-radius: 0 0 5px 5px;
+            max-height: 200px;
+            overflow-y: auto;
+            z-index: 1001;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.2);
+        }
+        .autocomplete-item {
+            padding: 8px 12px;
+            cursor: pointer;
+            border-bottom: 1px solid #eee;
+            font-size: 13px;
+        }
+        .autocomplete-item:hover {
+            background-color: #f0f0f0;
+        }
+        .autocomplete-gbr {
+            font-weight: bold;
+            color: #ff6600;
+        }
+        .autocomplete-line {
+            color: #666;
+            font-size: 12px;
+            margin-left: 10px;
+        }
+        input { 
+            padding: 5px; 
+            width: 150px; 
+            border: 1px solid #ccc; 
+            border-radius: 3px; 
+        }
+        .stats {
+            position: absolute;
+            bottom: 10px;
+            right: 10px;
+            z-index: 1000;
+            background: rgba(0,0,0,0.7);
+            color: white;
+            padding: 5px 10px;
+            border-radius: 5px;
+            font-size: 12px;
+        }
+        .bus-label {
+            width: 45px;
+            height: 40px;
+            border: 2px solid #333;
+            border-radius: 6px;
+            overflow: hidden;
+            font-family: 'Arial Black', sans-serif;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.4);
+            display: flex;
+            flex-direction: column;
+        }
+        .bus-top {
+            background: white;
+            color: #ff6600;
+            height: 20px;
+            line-height: 20px;
+            font-weight: bold;
+            font-size: 13px;
+            text-align: center;
+        }
+        .bus-bottom {
+            background: #ffcc00;
+            color: white;
+            height: 20px;
+            line-height: 20px;
+            font-weight: bold;
+            font-size: 11px;
+            text-align: center;
+            text-shadow: 1px 1px 1px rgba(0,0,0,0.2);
         }
     </style>
 </head>
 <body>
+<div class="search-container">
+    <div class="autocomplete-container">
+        <input type="text" id="busSearch" placeholder="Gbr ili Linija..." onkeyup="showSuggestions()" autocomplete="off">
+        <div id="suggestionsList" class="autocomplete-list" style="display: none;"></div>
+    </div>
+    <span id="busCount" style="font-size:12px; color:#333; line-height:28px;"></span>
+</div>
+<div class="stats">
+    <span id="statsText">Povezivanje...</span>
+</div>
 <div id="map"></div>
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script>
-    var map = L.map('map').setView([45.3271, 14.4422], 13);
-    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
+    var map = L.map('map').setView([45.327, 14.442], 13);
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OSM</a>'
+    }).addTo(map);
+    
     var markers = {};
-
-    function update() {
-        fetch('/api/buses/rijeka')
-            .then(res => res.json())
-            .then(data => {
-                if(!data.vehicles || !Array.isArray(data.vehicles)) return;
-                var currentIds = data.vehicles.map(v => v.garazniBroj);
-
-                data.vehicles.forEach(bus => {
-                    var id = bus.garazniBroj;
-                    var linija = bus.linija;
-                    var lat = bus.latituda;
-                    var lon = bus.longituda;
-
-                    if (lat && lon && id) {
-                        var html = `<div class="bus-label">
-                            <div style="color:#ff6600; height:20px; line-height:20px; font-weight:bold; text-align:center; font-size:13px;">${linija}</div>
-                            <div style="background:#ff6600; color:white; height:20px; line-height:20px; font-weight:bold; text-align:center; font-size:11px;">${id}</div>
-                        </div>`;
-                        var icon = L.divIcon({ html: html, className: '', iconSize: [45, 40], iconAnchor: [22, 20] });
-                        
-                        if (markers[id]) {
-                            markers[id].setLatLng([lat, lon]);
-                        } else {
-                            markers[id] = L.marker([lat, lon], {icon: icon}).addTo(map);
-                        }
-                    }
-                });
-
-                Object.keys(markers).forEach(k => {
-                    if (!currentIds.includes(parseInt(k))) {
-                        map.removeLayer(markers[k]);
-                        delete markers[k];
-                    }
-                });
-            });
+    var socket = null;
+    var lastUpdate = new Date();
+    
+    function formatTime(date) {
+        return date.toLocaleTimeString('hr-HR');
     }
-    setInterval(update, 5000);
-    update();
+    
+    function parseBusData(message) {
+        var parts = message.split(';');
+        if (parts.length < 6) return null;
+        
+        var garageNumber = parts[0];
+        var lat = parseFloat(parts[3]);
+        var lng = parseFloat(parts[4]);
+        var fullLabel = parts[5];
+        
+        var line = fullLabel.split('-')[0];
+        
+        return {
+            garageNumber: garageNumber,
+            line: line,
+            fullLabel: fullLabel,
+            latitude: lat,
+            longitude: lng
+        };
+    }
+    
+    function updateBuses(vehicles) {
+        var currentGbrs = vehicles.map(v => v.garageNumber);
+        
+        vehicles.forEach(bus => {
+            var labelContent = `
+                <div class="bus-label">
+                    <div class="bus-top">${bus.line}</div>
+                    <div class="bus-bottom">${bus.garageNumber}</div>
+                </div>
+            `;
+            
+            var icon = L.divIcon({ 
+                html: labelContent, 
+                className: '', 
+                iconSize: [45, 40],
+                iconAnchor: [22, 20]
+            });
+            
+            if (markers[bus.garageNumber]) {
+                markers[bus.garageNumber].setLatLng([bus.latitude, bus.longitude]);
+                markers[bus.garageNumber].getPopup().setContent(`
+                    <b>Gbr: ${bus.garageNumber}</b><br>
+                    <b>Linija: ${bus.line}</b><br>
+                    <b>Oznaka: ${bus.fullLabel}</b>
+                `);
+            } else {
+                var marker = L.marker([bus.latitude, bus.longitude], {icon: icon}).addTo(map);
+                marker.bindPopup(`
+                    <b>Gbr: ${bus.garageNumber}</b><br>
+                    <b>Linija: ${bus.line}</b><br>
+                    <b>Oznaka: ${bus.fullLabel}</b>
+                `);
+                markers[bus.garageNumber] = marker;
+            }
+        });
+        
+        for (var gbr in markers) { 
+            if (!currentGbrs.includes(gbr)) { 
+                map.removeLayer(markers[gbr]); 
+                delete markers[gbr]; 
+            } 
+        }
+        
+        lastUpdate = new Date();
+        document.getElementById('statsText').innerHTML = `Ažurirano: ${formatTime(lastUpdate)} | ${vehicles.length} vozila`;
+        document.getElementById('busCount').innerHTML = `${vehicles.length} vozila`;
+    }
+    
+    function connectWebSocket() {
+        socket = new WebSocket('ws://api.autotrolej.hr/api/Hub/location');
+        
+        socket.onopen = function() {
+            document.getElementById('statsText').innerHTML = 'Povezano, primanje podataka...';
+        };
+        
+        socket.onmessage = function(event) {
+            var lines = event.data.split('\n');
+            var vehicles = [];
+            
+            for (var i = 0; i < lines.length; i++) {
+                var line = lines[i].trim();
+                if (line && line.includes(';')) {
+                    var bus = parseBusData(line);
+                    if (bus && bus.latitude && bus.longitude && bus.latitude !== 0 && bus.longitude !== 0) {
+                        vehicles.push(bus);
+                    }
+                }
+            }
+            
+            if (vehicles.length > 0) {
+                updateBuses(vehicles);
+            }
+        };
+        
+        socket.onerror = function(error) {
+            document.getElementById('statsText').innerHTML = 'Greška pri povezivanju. Pokušavam ponovo...';
+        };
+        
+        socket.onclose = function() {
+            document.getElementById('statsText').innerHTML = 'Veza prekinuta. Povezujem se ponovo za 3 sekunde...';
+            setTimeout(connectWebSocket, 3000);
+        };
+    }
+    
+    function showSuggestions() {
+        var input = document.getElementById('busSearch');
+        var val = input.value.toLowerCase().trim();
+        var suggestionsDiv = document.getElementById('suggestionsList');
+        
+        if (val.length < 2) {
+            suggestionsDiv.style.display = 'none';
+            return;
+        }
+        
+        var suggestions = [];
+        for (var gbr in markers) {
+            var marker = markers[gbr];
+            var popupContent = marker.getPopup().getContent();
+            var gbrMatch = popupContent.match(/Gbr: (\d+)/);
+            var lineMatch = popupContent.match(/Linija: (\d+)/);
+            var garageNumber = gbrMatch ? gbrMatch[1] : '';
+            var line = lineMatch ? lineMatch[1] : '';
+            
+            if (garageNumber.includes(val) || line.includes(val)) {
+                suggestions.push({
+                    gbr: garageNumber,
+                    line: line,
+                    marker: marker
+                });
+            }
+        }
+        
+        var uniqueSuggestions = [];
+        var seenGbr = {};
+        for (var i = 0; i < suggestions.length; i++) {
+            if (!seenGbr[suggestions[i].gbr]) {
+                seenGbr[suggestions[i].gbr] = true;
+                uniqueSuggestions.push(suggestions[i]);
+            }
+        }
+        
+        if (uniqueSuggestions.length > 0) {
+            suggestionsDiv.innerHTML = '';
+            for (var i = 0; i < Math.min(uniqueSuggestions.length, 10); i++) {
+                var item = uniqueSuggestions[i];
+                var div = document.createElement('div');
+                div.className = 'autocomplete-item';
+                div.innerHTML = `<span class="autocomplete-gbr">${item.gbr}</span><span class="autocomplete-line">Linija ${item.line}</span>`;
+                div.onclick = (function(gbr, marker) {
+                    return function() {
+                        document.getElementById('busSearch').value = gbr;
+                        suggestionsDiv.style.display = 'none';
+                        map.setView(marker.getLatLng(), 15);
+                        marker.openPopup();
+                        filterBuses();
+                    };
+                })(item.gbr, item.marker);
+                suggestionsDiv.appendChild(div);
+            }
+            suggestionsDiv.style.display = 'block';
+        } else {
+            suggestionsDiv.style.display = 'none';
+        }
+    }
+    
+    function filterBuses() {
+        var val = document.getElementById('busSearch').value.toLowerCase();
+        var brojac = 0;
+        for (var gbr in markers) {
+            var marker = markers[gbr];
+            var popupContent = marker.getPopup().getContent();
+            if (popupContent.toLowerCase().includes(val)) {
+                marker.setOpacity(1);
+                brojac++;
+            } else {
+                marker.setOpacity(0.2);
+            }
+        }
+        document.getElementById('busCount').innerHTML = `${brojac} / ${Object.keys(markers).length} vozila`;
+    }
+    
+    document.addEventListener('click', function(e) {
+        var container = document.querySelector('.autocomplete-container');
+        if (container && !container.contains(e.target)) {
+            document.getElementById('suggestionsList').style.display = 'none';
+        }
+    });
+    
+    connectWebSocket();
 </script>
 </body>
 </html>
