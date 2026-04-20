@@ -1,3 +1,4 @@
 flask
 requests
-gunicorn
+gtfs-realtime-bindings
+protobuf
