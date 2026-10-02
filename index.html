@@ -17,7 +17,7 @@
         .ikona-vozila { 
             font-size: 18px; background: white; border-radius: 50%; 
             border: 2px solid #0055ff; text-align: center; 
-            width: 30px; height: 30px; line-height: 30px;
+            width: 32px; height: 32px; line-height: 32px;
             box-shadow: 0 2px 5px rgba(0,0,0,0.3);
         }
     </style>
@@ -36,8 +36,7 @@
 
         async function osvjezi() {
             try {
-                // Poziv prema tvom Render backendu
-                const res = await fetch('https://zet-live-server-1.onrender.com/podaci?t=' + Date.now());
+                const res = await fetch('https://rijeka-bus-tracker.onrender.com/podaci?t=' + Date.now());
                 const vozila = await res.json();
 
                 if (Array.isArray(vozila)) {
@@ -56,20 +55,17 @@
                             markers[v.id].setLatLng([v.lat, v.lon]).setPopupContent(info);
                         } else {
                             markers[v.id] = L.marker([v.lat, v.lon], {
-                                icon: L.divIcon({ html: ikona, className: 'ikona-vozila', iconSize: [30, 30] })
+                                icon: L.divIcon({ html: ikona, className: 'ikona-vozila', iconSize: [32, 32] })
                             }).addTo(map).bindPopup(info);
                         }
                     });
-                } else if (vozila.error) {
-                    statusBox.innerText = "⚠️ Greška servera: " + vozila.error;
                 }
             } catch (e) {
                 statusBox.style.borderColor = "red";
-                statusBox.innerText = "⏳ Server se budi ili je nedostupan...";
+                statusBox.innerText = "⏳ Čekam server...";
             }
         }
 
-        // Osvježava svakih 5 sekundi
         setInterval(osvjezi, 5000);
         osvjezi();
     </script>
