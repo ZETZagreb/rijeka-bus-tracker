@@ -1,58 +1,81 @@
-import os
-import requests
-from flask import Flask, jsonify
-from flask_cors import CORS
-from google.transit import gtfs_realtime_pb2
+<!DOCTYPE html>
+<html lang="hr">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ZET Uživo Praćenje</title>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <style>
+        body { margin: 0; padding: 0; font-family: Arial, sans-serif; }
+        #map { height: 100vh; width: 100%; }
+        #status-bar {
+            position: absolute; top: 15px; left: 50%; transform: translateX(-50%);
+            z-index: 1000; background: rgba(255, 255, 255, 0.95); padding: 10px 20px;
+            border-radius: 25px; border: 2px solid #0055ff;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.25); font-weight: bold; font-size: 14px;
+        }
+        .ikona-vozila { 
+            font-size: 16px; background: #ffffff; border-radius: 50%; 
+            border: 2px solid #0055ff; text-align: center; 
+            width: 34px; height: 34px; line-height: 32px;
+            box-shadow: 0 2px 6px rgba(0,0,0,0.3);
+        }
+    </style>
+</head>
+<body>
+    <div id="status-bar">🚀 Učitavanje vozila...</div>
+    <div id="map"></div>
 
-app = Flask(__name__)
-CORS(app)
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script>
+        var map = L.map('map').setView([45.813, 15.977], 13);
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            maxZoom: 19,
+            attribution: '© OpenStreetMap'
+        }).addTo(map);
 
-ZET_PROTOBUF_URL = "https://www.zet.hr/gtfs-rt-protobuf"
+        var markers = {};
+        var statusBox = document.getElementById('status-bar');
 
-@app.route('/')
-def home():
-    return jsonify({"status": "ok", "message": "ZET Live Backend je aktivan!"})
+        async function osvjezi() {
+            try {
+                const res = await fetch('/podaci?t=' + Date.now());
+                const vozila = await res.json();
 
-@app.route('/podaci')
-def get_data():
-    try:
-        headers = {'User-Agent': 'Mozilla/5.0'}
-        response = requests.get(ZET_PROTOBUF_URL, headers=headers, timeout=10)
-        
-        if response.status_code != 200:
-            return jsonify({"error": f"ZET API vratio status {response.status_code}"}), 500
+                if (Array.isArray(vozila)) {
+                    statusBox.style.borderColor = "#28a745";
+                    statusBox.innerText = "✅ Aktivna vozila uživo: " + vozila.length;
 
-        feed = gtfs_realtime_pb2.FeedMessage()
-        feed.ParseFromString(response.content)
+                    vozila.forEach(v => {
+                        let ikona = v.tip === 'tram' ? '🚃' : '🚌';
+                        let info = `
+                            <div style="font-size:14px;">
+                                <b>Linija: ${v.linija}</b><br>
+                                🚌 Garažni / ID: <b>${v.id}</b><br>
+                                ⚡ Brzina: ${v.brzina}
+                            </div>
+                        `;
 
-        vozila = []
+                        if (markers[v.id]) {
+                            markers[v.id].setLatLng([v.lat, v.lon]).getPopup().setContent(info);
+                        } else {
+                            markers[v.id] = L.marker([v.lat, v.lon], {
+                                icon: L.divIcon({ html: ikona, className: 'ikona-vozila', iconSize: [34, 34] })
+                            }).addTo(map).bindPopup(info);
+                        }
+                    });
+                } else {
+                    statusBox.style.borderColor = "#dc3545";
+                    statusBox.innerText = "⚠️ Greška s podacima servera";
+                }
+            } catch (e) {
+                statusBox.style.borderColor = "#ffc107";
+                statusBox.innerText = "⏳ Povezivanje sa serverom...";
+            }
+        }
 
-        for entity in feed.entity:
-            if entity.HasField('vehicle'):
-                v = entity.vehicle
-                
-                lat = v.position.latitude if v.HasField('position') else None
-                lon = v.position.longitude if v.HasField('position') else None
-                
-                if lat and lon:
-                    linija = v.trip.route_id if v.HasField('trip') else "N/A"
-                    vehicle_id = v.vehicle.id if (v.HasField('vehicle') and v.vehicle.id) else entity.id
-                    brzina_kmh = round(v.position.speed * 3.6, 1) if (v.HasField('position') and v.position.HasField('speed')) else 0
-
-                    vozila.append({
-                        "id": str(vehicle_id),
-                        "lat": lat,
-                        "lon": lon,
-                        "linija": str(linija),
-                        "brzina": f"{brzina_kmh} km/h",
-                        "tip": "tram" if len(str(linija)) <= 2 else "bus"
-                    })
-
-        return jsonify(vozila)
-
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
-
-if __name__ == '__main__':
-    port = int(os.environ.get("PORT", 5000))
-    app.run(host='0.0.0.0', port=port)
+        setInterval(osvjezi, 5000);
+        osvjezi();
+    </script>
+</body>
+</html>
