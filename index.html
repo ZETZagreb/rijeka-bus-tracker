@@ -1,81 +1,193 @@
 <!DOCTYPE html>
 <html lang="hr">
 <head>
-    <meta charset="utf-8" />
+    <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>ZET Uživo Praćenje</title>
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <style>
-        body { margin: 0; padding: 0; font-family: Arial, sans-serif; }
-        #map { height: 100vh; width: 100%; }
-        #status-bar {
-            position: absolute; top: 15px; left: 50%; transform: translateX(-50%);
-            z-index: 1000; background: rgba(255, 255, 255, 0.95); padding: 10px 20px;
-            border-radius: 25px; border: 2px solid #0055ff;
-            box-shadow: 0 4px 12px rgba(0,0,0,0.25); font-weight: bold; font-size: 14px;
+        body, html {
+            margin: 0;
+            padding: 0;
+            height: 100%;
+            width: 100%;
+            font-family: Arial, sans-serif;
         }
-        .ikona-vozila { 
-            font-size: 16px; background: #ffffff; border-radius: 50%; 
-            border: 2px solid #0055ff; text-align: center; 
-            width: 34px; height: 34px; line-height: 32px;
+        #map {
+            height: 100%;
+            width: 100%;
+        }
+        #counter {
+            position: absolute;
+            top: 10px;
+            left: 50%;
+            transform: translateX(-50%);
+            z-index: 1000;
+            background: rgba(255, 255, 255, 0.95);
+            padding: 8px 18px;
+            border-radius: 20px;
             box-shadow: 0 2px 6px rgba(0,0,0,0.3);
+            font-weight: bold;
+            font-size: 14px;
+            color: #1b5e20;
+        }
+        .line-badge {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background-color: #0277bd;
+            color: #ffffff;
+            font-weight: bold;
+            font-size: 12px;
+            border-radius: 50%;
+            border: 2px solid #ffffff;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.4);
+            width: 32px;
+            height: 32px;
+            text-align: center;
+        }
+        .line-badge.tram {
+            background-color: #d32f2f;
+        }
+        .stop-badge {
+            width: 10px;
+            height: 10px;
+            background-color: #455a64;
+            border: 2px solid #ffffff;
+            border-radius: 50%;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.3);
         }
     </style>
 </head>
 <body>
-    <div id="status-bar">🚀 Učitavanje vozila...</div>
+
+    <div id="counter">Aktivna vozila uživo: 0</div>
     <div id="map"></div>
 
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <script>
-        var map = L.map('map').setView([45.813, 15.977], 13);
+        const map = L.map('map').setView([45.8150, 15.9819], 12);
+
         L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-            maxZoom: 19,
-            attribution: '© OpenStreetMap'
+            attribution: '&copy; OpenStreetMap autorizacija'
         }).addTo(map);
 
-        var markers = {};
-        var statusBox = document.getElementById('status-bar');
+        let vehicleMarkers = {};
+        let activeRoutePolyline = null;
+        let routesData = [];
 
-        async function osvjezi() {
-            try {
-                const res = await fetch('/podaci?t=' + Date.now());
-                const vozila = await res.json();
+        function createLineIcon(linija, tip) {
+            const isTram = tip === "tram";
+            const bgClass = isTram ? "tram" : "";
+            return L.divIcon({
+                className: '',
+                html: `<div class="line-badge ${bgClass}">${linija}</div>`,
+                iconSize: [32, 32],
+                iconAnchor: [16, 16]
+            });
+        }
 
-                if (Array.isArray(vozila)) {
-                    statusBox.style.borderColor = "#28a745";
-                    statusBox.innerText = "✅ Aktivna vozila uživo: " + vozila.length;
+        function createStopIcon() {
+            return L.divIcon({
+                className: '',
+                html: `<div class="stop-badge"></div>`,
+                iconSize: [10, 10],
+                iconAnchor: [5, 5]
+            });
+        }
 
-                    vozila.forEach(v => {
-                        let ikona = v.tip === 'tram' ? '🚃' : '🚌';
-                        let info = `
-                            <div style="font-size:14px;">
-                                <b>Linija: ${v.linija}</b><br>
-                                🚌 Garažni / ID: <b>${v.id}</b><br>
-                                ⚡ Brzina: ${v.brzina}
-                            </div>
-                        `;
+        function drawRoute(routeId) {
+            if (activeRoutePolyline) {
+                map.removeLayer(activeRoutePolyline);
+                activeRoutePolyline = null;
+            }
 
-                        if (markers[v.id]) {
-                            markers[v.id].setLatLng([v.lat, v.lon]).getPopup().setContent(info);
-                        } else {
-                            markers[v.id] = L.marker([v.lat, v.lon], {
-                                icon: L.divIcon({ html: ikona, className: 'ikona-vozila', iconSize: [34, 34] })
-                            }).addTo(map).bindPopup(info);
-                        }
-                    });
-                } else {
-                    statusBox.style.borderColor = "#dc3545";
-                    statusBox.innerText = "⚠️ Greška s podacima servera";
-                }
-            } catch (e) {
-                statusBox.style.borderColor = "#ffc107";
-                statusBox.innerText = "⏳ Povezivanje sa serverom...";
+            const route = routesData.find(r => r.id == routeId || r.short_name == routeId || r.name == routeId);
+            if (route && route.coordinates) {
+                const latLngs = route.coordinates.map(c => [c[1], c[0]]);
+                activeRoutePolyline = L.polyline(latLngs, { color: '#0288d1', weight: 4, opacity: 0.8 }).addTo(map);
             }
         }
 
-        setInterval(osvjezi, 5000);
-        osvjezi();
+        function updateVehicles() {
+            fetch('/podaci')
+                .then(res => res.json())
+                .then(data => {
+                    document.getElementById('counter').innerText = `Aktivna vozila uživo: ${data.length}`;
+
+                    const currentIds = new Set();
+
+                    data.forEach(v => {
+                        currentIds.add(v.id);
+                        const popupContent = `
+                            <strong>Linija:</strong> ${v.linija}<br>
+                            <strong>Smjer:</strong> ${v.smjer}<br>
+                            <strong>Garažni broj:</strong> ${v.id}<br>
+                            <strong>Brzina:</strong> ${v.brzina}
+                        `;
+
+                        if (vehicleMarkers[v.id]) {
+                            vehicleMarkers[v.id].setLatLng([v.lat, v.lon]);
+                            vehicleMarkers[v.id].setIcon(createLineIcon(v.linija, v.tip));
+                            vehicleMarkers[v.id].getPopup().setContent(popupContent);
+                        } else {
+                            const marker = L.marker([v.lat, v.lon], { icon: createLineIcon(v.linija, v.tip) })
+                                .bindPopup(popupContent)
+                                .addTo(map);
+
+                            marker.on('click', () => {
+                                drawRoute(v.linija);
+                            });
+
+                            vehicleMarkers[v.id] = marker;
+                        }
+                    });
+
+                    Object.keys(vehicleMarkers).forEach(id => {
+                        if (!currentIds.has(id)) {
+                            map.removeLayer(vehicleMarkers[id]);
+                            delete vehicleMarkers[id];
+                        }
+                    });
+                })
+                .catch(err => console.error("Greška s vozilima:", err));
+        }
+
+        function loadRoutes() {
+            fetch('/rute')
+                .then(res => res.json())
+                .then(data => { routesData = data; })
+                .catch(err => console.error("Greška pri učitavanju ruta:", err));
+        }
+
+        function loadStops() {
+            fetch('/stanice')
+                .then(res => res.json())
+                .then(data => {
+                    const rawList = Array.isArray(data) ? data : (data.stops || data.data || []);
+                    rawList.forEach(s => {
+                        const lat = s.latitude || s.lat;
+                        const lon = s.longitude || s.lon;
+                        const name = s.name || s.stop_name || "Stanica";
+
+                        if (lat && lon) {
+                            const popupContent = `
+                                <strong>Stanica:</strong> ${name}<br>
+                                <em>Vremena dolaska dostupna u realnom vremenu na tabli.</em>
+                            `;
+                            L.marker([lat, lon], { icon: createStopIcon() })
+                                .bindPopup(popupContent)
+                                .addTo(map);
+                        }
+                    });
+                })
+                .catch(err => console.error("Greška sa stanicama:", err));
+        }
+
+        loadRoutes();
+        loadStops();
+        updateVehicles();
+        setInterval(updateVehicles, 10000);
     </script>
 </body>
 </html>
